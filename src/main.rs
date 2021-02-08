@@ -2,6 +2,8 @@
 
 mod gtfs_realtime;
 
+use gtfs_realtime::FeedMessage;
+
 use chrono::NaiveDate;
 use chrono::TimeZone;
 use chrono::Timelike;
@@ -20,6 +22,9 @@ use rocket_contrib::json::Json;
 
 use serde::Serialize;
 
+use protobuf::Message;
+
+use std::collections::HashMap;
 use std::sync::Mutex;
 
 lazy_static! {
@@ -37,23 +42,41 @@ struct DelayMapStopTime {
     name: String,
     lat: Option<f64>,
     lon: Option<f64>,
+    arrival_delay: i32,
     arrival_datetime: String,
+    departure_delay: i32,
     departure_datetime: String,
 }
 
-impl From<&StopTime> for DelayMapStopTime {
-    fn from(stoptime: &StopTime) -> DelayMapStopTime {
+impl DelayMapStopTime {
+    fn from_gtfs(stoptime: &StopTime, delay: &Delay) -> DelayMapStopTime {
         DelayMapStopTime {
             name: stoptime.stop.name.clone(),
             lat: stoptime.stop.latitude,
             lon: stoptime.stop.longitude,
+            arrival_delay: delay.arrival_delay.unwrap_or(0),
             arrival_datetime: stoptime
                 .arrival_time
-                .map(|x| format!("{:02}:{:02}:{:02}", (x / 60 / 60) % 24, (x / 60) % 60, x % 60))
+                .map(|time| {
+                    format!(
+                        "{:02}:{:02}:{:02}",
+                        (time / 60 / 60) % 24,
+                        (time / 60) % 60,
+                        time % 60
+                    )
+                })
                 .unwrap_or(format!("UNKNOWN")),
+            departure_delay: delay.departure_delay.unwrap_or(0),
             departure_datetime: stoptime
                 .departure_time
-                .map(|x| format!("{:02}:{:02}:{:02}", (x / 60 / 60) % 24, (x / 60) % 60, x % 60))
+                .map(|time| {
+                    format!(
+                        "{:02}:{:02}:{:02}",
+                        (time / 60 / 60) % 24,
+                        (time / 60) % 60,
+                        time % 60
+                    )
+                })
                 .unwrap_or(format!("UNKNOWN")),
         }
     }
@@ -62,26 +85,38 @@ impl From<&StopTime> for DelayMapStopTime {
 #[derive(Serialize, Debug, Clone)]
 struct DelayMapTrain {
     name: String,
-    delay: usize,
     stops: Vec<DelayMapStopTime>,
     next_stop_index: usize,
     estimated_lat: f64,
     estimated_lon: f64,
 }
 
-impl From<&Trip> for DelayMapTrain {
-    fn from(trip: &Trip) -> DelayMapTrain {
+impl DelayMapTrain {
+    fn from_gtfs(trip: &Trip, delaymap: &HashMap<String, HashMap<String, Delay>>) -> DelayMapTrain {
+        let mut stops = vec![];
+        let mut curr_delay = Delay {
+            arrival_delay: Some(0),
+            departure_delay: Some(0),
+        };
+        for stop_time in trip.stop_times.iter() {
+            if let Some(trip_delaymap) = delaymap.get(&trip.id) {
+                if let Some(delay_patch) = trip_delaymap.get(&stop_time.stop.id) {
+                    curr_delay.arrival_delay = delay_patch
+                        .arrival_delay
+                        .or(curr_delay.arrival_delay);
+                    curr_delay.departure_delay = delay_patch
+                        .departure_delay
+                        .or(curr_delay.departure_delay);
+                }
+            }
+            stops.push(DelayMapStopTime::from_gtfs(&stop_time, &curr_delay));
+        }
         DelayMapTrain {
             name: trip
                 .trip_headsign
                 .clone()
                 .unwrap_or("Unknown Train".to_string()),
-            delay: 0,
-            stops: trip
-                .stop_times
-                .iter()
-                .map(|x| DelayMapStopTime::from(x.clone()))
-                .collect(),
+            stops: stops,
             next_stop_index: 0,
             estimated_lat: 0.0,
             estimated_lon: 0.0,
@@ -89,15 +124,22 @@ impl From<&Trip> for DelayMapTrain {
     }
 }
 
+#[derive(Serialize, Debug, Clone)]
+struct Delay {
+    arrival_delay: Option<i32>,
+    departure_delay: Option<i32>,
+}
+
 #[get("/trains")]
 fn trains() -> Json<Vec<DelayMapTrain>> {
     let gtfs = GTFS.lock().unwrap();
+    let delays = get_delays();
     Json(
         gtfs.trips
             .values()
             .filter_map(|trip| {
                 if rides_now(&gtfs, &trip) {
-                    Some(trip.clone().into())
+                    Some(DelayMapTrain::from_gtfs(trip.clone(), &delays))
                 } else {
                     None
                 }
@@ -173,7 +215,47 @@ fn rides_at_date(gtfs: &Gtfs, trip: &Trip, date: NaiveDate) -> bool {
     ret
 }
 
+fn get_delays() -> HashMap<String, HashMap<String, Delay>> {
+    let mut response = reqwest::blocking::get(
+        "https://sncb-opendata.hafas.de/gtfs/realtime/c21ac6758dd25af84cca5b707f3cb3de",
+    )
+    .unwrap();
+    let feed = FeedMessage::parse_from_reader(&mut response).unwrap();
+
+    let mut ret = HashMap::new();
+
+    for entity in feed.entity {
+        if let Some(update) = entity.trip_update.into_option() {
+            if let Some(trip) = update.trip.into_option() {
+                let key = trip.get_trip_id();
+                let mut delay_map: HashMap<String, Delay> = HashMap::new();
+                for update in update.stop_time_update {
+                    let mut delay = Delay {
+                        departure_delay: None,
+                        arrival_delay: None,
+                    };
+                    let stop_id = update.get_stop_id().to_string();
+
+                    if let Some(departure) = update.departure.into_option() {
+                        delay.departure_delay = Some(departure.get_delay())
+                    }
+
+                    if let Some(arrival) = update.arrival.into_option() {
+                        delay.arrival_delay = Some(arrival.get_delay())
+                    }
+
+                    delay_map.insert(stop_id, delay);
+                }
+                ret.insert(key.to_string(), delay_map);
+            }
+        }
+    }
+
+    ret
+}
+
 fn main() {
+    get_delays();
     // This also loads the data at startup
     GTFS.lock().unwrap().print_stats();
     rocket::ignite().mount("/", routes![trains]).launch();
