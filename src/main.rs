@@ -1,5 +1,7 @@
 #![feature(proc_macro_hygiene, decl_macro)]
 
+mod gtfs_realtime;
+
 use chrono::NaiveDate;
 use chrono::TimeZone;
 use chrono::Timelike;
