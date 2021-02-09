@@ -43,9 +43,9 @@ struct DelayMapStopTime {
     lat: Option<f64>,
     lon: Option<f64>,
     arrival_delay: i32,
-    arrival_datetime: String,
+    arrival_timestamp: u32,
     departure_delay: i32,
-    departure_datetime: String,
+    departure_timestamp: u32,
 }
 
 impl DelayMapStopTime {
@@ -55,29 +55,9 @@ impl DelayMapStopTime {
             lat: stoptime.stop.latitude,
             lon: stoptime.stop.longitude,
             arrival_delay: delay.arrival_delay.unwrap_or(0),
-            arrival_datetime: stoptime
-                .arrival_time
-                .map(|time| {
-                    format!(
-                        "{:02}:{:02}:{:02}",
-                        (time / 60 / 60) % 24,
-                        (time / 60) % 60,
-                        time % 60
-                    )
-                })
-                .unwrap_or(format!("UNKNOWN")),
+            arrival_timestamp: stoptime.arrival_time.unwrap_or(0),
             departure_delay: delay.departure_delay.unwrap_or(0),
-            departure_datetime: stoptime
-                .departure_time
-                .map(|time| {
-                    format!(
-                        "{:02}:{:02}:{:02}",
-                        (time / 60 / 60) % 24,
-                        (time / 60) % 60,
-                        time % 60
-                    )
-                })
-                .unwrap_or(format!("UNKNOWN")),
+            departure_timestamp: stoptime.departure_time.unwrap_or(0),
         }
     }
 }
@@ -86,7 +66,8 @@ impl DelayMapStopTime {
 struct DelayMapTrain {
     name: String,
     stops: Vec<DelayMapStopTime>,
-    next_stop_index: usize,
+    stop_index: usize,
+    is_stopped: bool,
     estimated_lat: f64,
     estimated_lon: f64,
 }
@@ -98,18 +79,32 @@ impl DelayMapTrain {
             arrival_delay: Some(0),
             departure_delay: Some(0),
         };
-        for stop_time in trip.stop_times.iter() {
+        let mut current_stop: Option<usize> = None;
+        let mut is_stopped: bool = true;
+        let local_datetime = Brussels.from_utc_datetime(&Utc::now().naive_utc());
+        let local_timestamp = local_datetime.time().num_seconds_from_midnight() as i64;
+        let mut previous_departure = 0;
+        for (i, stop_time) in trip.stop_times.iter().enumerate() {
             if let Some(trip_delaymap) = delaymap.get(&trip.id) {
                 if let Some(delay_patch) = trip_delaymap.get(&stop_time.stop.id) {
-                    curr_delay.arrival_delay = delay_patch
-                        .arrival_delay
-                        .or(curr_delay.arrival_delay);
-                    curr_delay.departure_delay = delay_patch
-                        .departure_delay
-                        .or(curr_delay.departure_delay);
+                    curr_delay.arrival_delay =
+                        delay_patch.arrival_delay.or(curr_delay.arrival_delay);
+                    curr_delay.departure_delay =
+                        delay_patch.departure_delay.or(curr_delay.departure_delay);
                 }
             }
-            stops.push(DelayMapStopTime::from_gtfs(&stop_time, &curr_delay));
+            let stop = DelayMapStopTime::from_gtfs(&stop_time, &curr_delay);
+            let actual_arrival = stop.arrival_timestamp as i64 + stop.arrival_delay as i64;
+            let actual_departure = stop.departure_timestamp as i64 + stop.departure_delay as i64;
+            if actual_arrival < local_timestamp && actual_departure > local_timestamp {
+                current_stop = Some(i);
+                is_stopped = true;
+            } else if actual_arrival > local_timestamp && previous_departure < local_timestamp {
+                current_stop = Some(i);
+                is_stopped = false;
+            }
+            previous_departure = actual_departure;
+            stops.push(stop);
         }
         DelayMapTrain {
             name: trip
@@ -117,7 +112,8 @@ impl DelayMapTrain {
                 .clone()
                 .unwrap_or("Unknown Train".to_string()),
             stops: stops,
-            next_stop_index: 0,
+            stop_index: current_stop.unwrap_or(0),
+            is_stopped: is_stopped,
             estimated_lat: 0.0,
             estimated_lon: 0.0,
         }
