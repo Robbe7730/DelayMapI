@@ -84,6 +84,10 @@ impl DelayMapTrain {
         let local_datetime = Brussels.from_utc_datetime(&Utc::now().naive_utc());
         let local_timestamp = local_datetime.time().num_seconds_from_midnight() as i64;
         let mut previous_departure = 0;
+        let mut estimated_lat = 0.0;
+        let mut estimated_lon = 0.0;
+        let mut previous_stop_lat = 0.0;
+        let mut previous_stop_lon = 0.0;
         for (i, stop_time) in trip.stop_times.iter().enumerate() {
             if let Some(trip_delaymap) = delaymap.get(&trip.id) {
                 if let Some(delay_patch) = trip_delaymap.get(&stop_time.stop.id) {
@@ -99,11 +103,20 @@ impl DelayMapTrain {
             if actual_arrival < local_timestamp && actual_departure > local_timestamp {
                 current_stop = Some(i);
                 is_stopped = true;
+                estimated_lat = stop.lat.unwrap_or(0.0);
+                estimated_lon = stop.lon.unwrap_or(0.0);
             } else if actual_arrival > local_timestamp && previous_departure < local_timestamp {
                 current_stop = Some(i);
                 is_stopped = false;
+                let curr_lat = stop.lat.unwrap_or(0.0);
+                let curr_lon = stop.lon.unwrap_or(0.0);
+                let percentage_complete: f64 = ((local_timestamp - previous_departure) as f64) / (actual_arrival - previous_departure) as f64;
+                estimated_lat = percentage_complete * curr_lat + (1.0 - percentage_complete) * previous_stop_lat;
+                estimated_lon = percentage_complete * curr_lon + (1.0 - percentage_complete) * previous_stop_lon;
             }
             previous_departure = actual_departure;
+            previous_stop_lat = stop.lat.unwrap_or(0.0);
+            previous_stop_lon = stop.lon.unwrap_or(0.0);
             stops.push(stop);
         }
         DelayMapTrain {
@@ -114,8 +127,8 @@ impl DelayMapTrain {
             stops: stops,
             stop_index: current_stop.unwrap_or(0),
             is_stopped: is_stopped,
-            estimated_lat: 0.0,
-            estimated_lon: 0.0,
+            estimated_lat: estimated_lat,
+            estimated_lon: estimated_lon
         }
     }
 }
