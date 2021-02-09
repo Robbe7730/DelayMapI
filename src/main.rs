@@ -26,6 +26,8 @@ use protobuf::Message;
 
 use std::collections::HashMap;
 use std::sync::Mutex;
+use std::thread;
+use std::time::Duration;
 
 lazy_static! {
     static ref GTFS: Mutex<Gtfs> = {
@@ -110,9 +112,12 @@ impl DelayMapTrain {
                 is_stopped = false;
                 let curr_lat = stop.lat.unwrap_or(0.0);
                 let curr_lon = stop.lon.unwrap_or(0.0);
-                let percentage_complete: f64 = ((local_timestamp - previous_departure) as f64) / (actual_arrival - previous_departure) as f64;
-                estimated_lat = percentage_complete * curr_lat + (1.0 - percentage_complete) * previous_stop_lat;
-                estimated_lon = percentage_complete * curr_lon + (1.0 - percentage_complete) * previous_stop_lon;
+                let percentage_complete: f64 = ((local_timestamp - previous_departure) as f64)
+                    / (actual_arrival - previous_departure) as f64;
+                estimated_lat = percentage_complete * curr_lat
+                    + (1.0 - percentage_complete) * previous_stop_lat;
+                estimated_lon = percentage_complete * curr_lon
+                    + (1.0 - percentage_complete) * previous_stop_lon;
             }
             previous_departure = actual_departure;
             previous_stop_lat = stop.lat.unwrap_or(0.0);
@@ -128,7 +133,7 @@ impl DelayMapTrain {
             stop_index: current_stop.unwrap_or(0),
             is_stopped: is_stopped,
             estimated_lat: estimated_lat,
-            estimated_lon: estimated_lon
+            estimated_lon: estimated_lon,
         }
     }
 }
@@ -263,9 +268,29 @@ fn get_delays() -> HashMap<String, HashMap<String, Delay>> {
     ret
 }
 
+fn update_gtfs() {
+    let mut gtfs = GTFS.lock().unwrap();
+    *gtfs = Gtfs::from_url(
+        "https://sncb-opendata.hafas.de/gtfs/static/c21ac6758dd25af84cca5b707f3cb3de",
+    )
+    .expect("Invalid GTFS url");
+}
+
 fn main() {
-    get_delays();
-    // This also loads the data at startup
-    GTFS.lock().unwrap().print_stats();
-    rocket::ignite().mount("/", routes![trains]).launch();
+    thread::spawn(move || {
+        loop {
+            println!("Updating");
+            update_gtfs();
+            println!("Done updating");
+            thread::sleep(Duration::new(24 * 60 * 60, 0));
+        }
+    });
+
+    let cors = rocket_cors::CorsOptions::default()
+        .to_cors()
+        .expect("Invalid CORS settings");
+    rocket::ignite()
+        .mount("/", routes![trains])
+        .attach(cors)
+        .launch();
 }
