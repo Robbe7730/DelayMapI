@@ -17,7 +17,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Install protoc
-      run: apt install -y protobuf-compiler
+      run: sudo apt install -y protobuf-compiler
     - name: Build
       run: cargo build --release --verbose
     - name: Deploy
