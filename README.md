@@ -14,9 +14,9 @@ struct DelayMapStopTime {
     name: String,
     lat: Option<f64>,
     lon: Option<f64>,
-    arrival_delay: i32,         // In minutes
+    arrival_delay: i32,         // In seconds
     arrival_timestamp: u32,     // In seconds after midnight
-    departure_delay: i32,       // In minutes
+    departure_delay: i32,       // In seconds
     departure_timestamp: u32,   // In seconds after midnight
 }
 
