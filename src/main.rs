@@ -105,7 +105,8 @@ impl DelayMapTrain {
             let stop = DelayMapStopTime::from_gtfs(&stop_time, &curr_delay);
             let actual_arrival = stop.arrival_timestamp as i64 + stop.arrival_delay as i64;
             let actual_departure = stop.departure_timestamp as i64 + stop.departure_delay as i64;
-            if actual_arrival < local_timestamp && actual_departure > local_timestamp {
+            
+            if (i == 0 || actual_arrival < local_timestamp) && actual_departure > local_timestamp {
                 current_stop = Some(i);
                 is_stopped = true;
                 estimated_lat = stop.lat.unwrap_or(0.0);
