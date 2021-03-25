@@ -11,6 +11,7 @@ The API for [DelayMap](https://github.com/Robbe7730/DelayMap) 3.0.0.
 
 ```rust
 struct DelayMapStopTime {
+    id: String;
     name: String,
     lat: Option<f64>,
     lon: Option<f64>,
@@ -27,5 +28,6 @@ struct DelayMapTrain {
     is_stopped: bool,
     estimated_lat: f64,
     estimated_lon: f64,
+    stop_id: String,
 }
 ```

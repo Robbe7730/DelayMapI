@@ -48,6 +48,7 @@ struct DelayMapStopTime {
     arrival_timestamp: u32,
     departure_delay: i32,
     departure_timestamp: u32,
+    stop_id: String,
 }
 
 impl DelayMapStopTime {
@@ -60,12 +61,14 @@ impl DelayMapStopTime {
             arrival_timestamp: stoptime.arrival_time.unwrap_or(0),
             departure_delay: delay.departure_delay.unwrap_or(0),
             departure_timestamp: stoptime.departure_time.unwrap_or(0),
+            stop_id: stoptime.stop.id.to_string(),
         }
     }
 }
 
 #[derive(Serialize, Debug, Clone)]
 struct DelayMapTrain {
+    id: String,
     name: String,
     stops: Vec<DelayMapStopTime>,
     stop_index: usize,
@@ -125,6 +128,7 @@ impl DelayMapTrain {
             stops.push(stop);
         }
         DelayMapTrain {
+            id: trip.id.to_string(),
             name: trip
                 .trip_headsign
                 .clone()
