@@ -31,10 +31,7 @@ use std::time::Duration;
 
 lazy_static! {
     static ref GTFS: Mutex<Gtfs> = {
-        let gtfs = Gtfs::from_url(
-            "https://sncb-opendata.hafas.de/gtfs/static/c21ac6758dd25af84cca5b707f3cb3de",
-        )
-        .expect("Invalid GTFS url");
+        let gtfs = Gtfs::from_path("./gtfs_transit.zip").unwrap();
         Mutex::new(gtfs)
     };
 }
@@ -235,10 +232,12 @@ fn rides_at_date(gtfs: &Gtfs, trip: &Trip, date: NaiveDate) -> bool {
 }
 
 fn get_delays() -> HashMap<String, HashMap<String, Delay>> {
-    let mut response = reqwest::blocking::get(
-        "https://sncb-opendata.hafas.de/gtfs/realtime/c21ac6758dd25af84cca5b707f3cb3de",
-    )
-    .unwrap();
+    let client = reqwest::blocking::Client::new();
+    let mut response = client
+        .get("https://api.delijn.be/gtfs/v2/realtime?json=false",)
+        .header("Ocp-Apim-Subscription-Key", "<key here>")
+        .send()
+        .unwrap();
     let feed = FeedMessage::parse_from_reader(&mut response).unwrap();
 
     let mut ret = HashMap::new();
@@ -275,10 +274,7 @@ fn get_delays() -> HashMap<String, HashMap<String, Delay>> {
 
 fn update_gtfs() {
     let mut gtfs = GTFS.lock().unwrap();
-    *gtfs = Gtfs::from_url(
-        "https://sncb-opendata.hafas.de/gtfs/static/c21ac6758dd25af84cca5b707f3cb3de",
-    )
-    .expect("Invalid GTFS url");
+    *gtfs = Gtfs::from_path("./gtfs_transit.zip").unwrap();
 }
 
 fn main() {
