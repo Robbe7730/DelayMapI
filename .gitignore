@@ -1,2 +1,3 @@
 /target
 src/gtfs_realtime.rs
+gtfs_transit.zip
