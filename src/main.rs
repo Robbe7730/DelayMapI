@@ -41,6 +41,7 @@ lazy_static! {
 }
 
 #[derive(Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 struct DelayMapStopTime {
     name: String,
     lat: Option<f64>,
@@ -68,6 +69,7 @@ impl DelayMapStopTime {
 }
 
 #[derive(Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 struct DelayMapTrain {
     id: String,
     name: String,
@@ -145,12 +147,14 @@ impl DelayMapTrain {
 }
 
 #[derive(Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 struct Delay {
     arrival_delay: Option<i32>,
     departure_delay: Option<i32>,
 }
 
 #[derive(Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 struct DelayMapStop {
     name: String,
     lat: Option<f64>,
@@ -170,6 +174,7 @@ impl DelayMapStop {
 }
 
 #[derive(Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 struct DelayMapWorks {
     id: String,
     name: String,
