@@ -14,6 +14,7 @@ use gtfs_structures::Exception;
 use gtfs_structures::Gtfs;
 use gtfs_structures::StopTime;
 use gtfs_structures::Trip;
+use gtfs_structures::Stop;
 
 use lazy_static::lazy_static;
 
@@ -149,6 +150,52 @@ struct Delay {
     departure_delay: Option<i32>,
 }
 
+#[derive(Serialize, Debug, Clone)]
+struct DelayMapStop {
+    name: String,
+    lat: Option<f64>,
+    lon: Option<f64>,
+    stop_id: String,
+}
+
+impl DelayMapStop {
+    pub fn from_gtfs(stop: &Stop) -> Self {
+        DelayMapStop {
+            name: stop.name.to_string(),
+            lat: stop.latitude,
+            lon: stop.longitude,
+            stop_id: stop.id.to_string(),
+        }
+    }
+}
+
+#[derive(Serialize, Debug, Clone)]
+struct DelayMapWorks {
+    id: String,
+    name: String,
+    message: String,
+    impacted_station: Option<DelayMapStop>,
+    start_date: String,
+    end_date: String,
+    start_time: String,
+    end_time: String,
+}
+
+impl DelayMapWorks {
+    pub fn empty() -> Self {
+        return DelayMapWorks {
+            id: "Unknown id".to_string(),
+            name: "Unknown name".to_string(),
+            message: "No message given".to_string(),
+            impacted_station: None,
+            start_date: "Unknown start date".to_string(),
+            end_date: "Unknown end date".to_string(),
+            start_time: "Unknown start time".to_string(),
+            end_time: "Unknown end time".to_string(),
+        }
+    }
+}
+
 #[get("/trains")]
 fn trains() -> Json<Vec<DelayMapTrain>> {
     let gtfs = GTFS.lock().unwrap();
@@ -165,6 +212,60 @@ fn trains() -> Json<Vec<DelayMapTrain>> {
             })
             .collect(),
     )
+}
+
+#[get("/works")]
+fn works() -> Json<Vec<DelayMapWorks>> {
+    let response = reqwest::blocking::get(
+        "http://www.belgianrail.be/jp/nmbs-realtime/query.exe/nny?performLocating=512&tpl=himmatch2json&look_nv=type|himmatch|maxnumber|300|no_match|yes|pubchannels|custom1|1028|",
+    )
+    .unwrap();
+    let gtfs = GTFS.lock().unwrap();
+
+    let mut ret = vec!();
+
+    let content = response.text().unwrap();
+
+    let mut curr_works = DelayMapWorks::empty();
+
+    for line in content.lines() {
+        if line == "{" {
+            // Create new DelayMapWorks
+            curr_works = DelayMapWorks::empty();
+        } else if line == "}" {
+            // Store the DelayMapWorks
+            ret.push(curr_works.clone());
+        } else {
+            let line_split = line.split_once(':');
+
+            if line_split.is_some() {
+                let (mut key, mut value) = line_split.unwrap();
+                key = key.strip_prefix(",").unwrap_or(key);
+                key = key.strip_prefix("\"").unwrap_or(key);
+                key = key.strip_suffix("\"").unwrap_or(key);
+
+                value = value.strip_prefix(",").unwrap_or(value);
+                value = value.strip_prefix("\"").unwrap_or(value);
+                value = value.strip_suffix("\"").unwrap_or(value);
+
+                match key {
+                    "id" => curr_works.id = value.to_string(),
+                    "caption" => curr_works.name = value.to_string(),
+                    "message" => curr_works.message = value.to_string(),
+                    "pubstartdate_0" => curr_works.start_date = value.to_string(),
+                    "pubstarttime_0" => curr_works.start_time = value.to_string(),
+                    "pubenddate_0" => curr_works.end_date = value.to_string(),
+                    "pubendtime_0" => curr_works.end_time = value.to_string(),
+                    "impactstation_extId" => curr_works.impacted_station = Some(DelayMapStop::from_gtfs(&gtfs.stops[value])),
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    return Json(
+        ret
+    );
 }
 
 fn rides_now(gtfs: &Gtfs, trip: &Trip) -> bool {
@@ -295,7 +396,7 @@ fn main() {
         .to_cors()
         .expect("Invalid CORS settings");
     rocket::ignite()
-        .mount("/", routes![trains])
+        .mount("/", routes![trains, works])
         .attach(cors)
         .launch();
 }
