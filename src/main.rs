@@ -184,6 +184,7 @@ struct DelayMapWorks {
     end_date: String,
     start_time: String,
     end_time: String,
+    urls: Vec<DelayMapURL>,
 }
 
 impl DelayMapWorks {
@@ -197,8 +198,16 @@ impl DelayMapWorks {
             end_date: "Unknown end date".to_string(),
             start_time: "Unknown start time".to_string(),
             end_time: "Unknown end time".to_string(),
+            urls: vec!(),
         }
     }
+}
+
+#[derive(Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+struct DelayMapURL {
+    url: String,
+    label: String,
 }
 
 #[get("/trains")]
@@ -233,7 +242,9 @@ fn works() -> Json<Vec<DelayMapWorks>> {
 
     let mut curr_works = DelayMapWorks::empty();
 
-    for line in content.lines() {
+    let mut line_iter = content.lines().peekable();
+    while line_iter.peek().is_some() {
+        let line = line_iter.next().unwrap();
         if line == "{" {
             // Create new DelayMapWorks
             curr_works = DelayMapWorks::empty();
@@ -262,6 +273,45 @@ fn works() -> Json<Vec<DelayMapWorks>> {
                     "pubenddate_0" => curr_works.end_date = value.to_string(),
                     "pubendtime_0" => curr_works.end_time = value.to_string(),
                     "impactstation_extId" => curr_works.impacted_station = Some(DelayMapStop::from_gtfs(&gtfs.stops[value])),
+                    "urllist" => {
+                        let mut urls = vec!();
+                        let mut urlline = line;
+                        let mut curr_url = DelayMapURL {
+                            label: "Link".to_string(),
+                            url: "#".to_string(),
+                        };
+                        while urlline != "]" {
+                            urlline = line_iter.next().unwrap();
+                            if urlline.ends_with("{") {
+                                curr_url = DelayMapURL {
+                                    label: "Link".to_string(),
+                                    url: "#".to_string(),
+                                };
+                            } else if urlline.starts_with("}") {
+                                urls.push(curr_url.clone());
+                            } else {
+                                let urlline_split = urlline.split_once(":");
+
+                                if urlline_split.is_some() {
+                                    let (mut urlkey, mut urlvalue) = urlline_split.unwrap();
+                                    urlkey = urlkey.strip_prefix(",").unwrap_or(urlkey);
+                                    urlkey = urlkey.strip_prefix("\"").unwrap_or(urlkey);
+                                    urlkey = urlkey.strip_suffix("\"").unwrap_or(urlkey);
+
+                                    urlvalue = urlvalue.strip_prefix(",").unwrap_or(urlvalue);
+                                    urlvalue = urlvalue.strip_prefix("\"").unwrap_or(urlvalue);
+                                    urlvalue = urlvalue.strip_suffix("\"").unwrap_or(urlvalue);
+                                    match urlkey {
+                                        "url" => curr_url.url = urlvalue.to_string(),
+                                        "label" => curr_url.label = urlvalue.to_string(),
+                                        _ => {}
+                                    }
+                                }
+                            }
+                        }
+
+                        curr_works.urls = urls.clone();
+                    },
                     _ => {}
                 }
             }
