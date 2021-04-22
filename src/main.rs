@@ -230,15 +230,21 @@ fn trains() -> Json<Vec<DelayMapTrain>> {
 
 #[get("/works")]
 fn works() -> Json<Vec<DelayMapWorks>> {
-    let response = reqwest::blocking::get(
+    let response_res = reqwest::blocking::get(
         "http://www.belgianrail.be/jp/nmbs-realtime/query.exe/nny?performLocating=512&tpl=himmatch2json&look_nv=type|himmatch|maxnumber|300|no_match|yes|pubchannels|custom1|1028|",
-    )
-    .unwrap();
+    );
+
+    if response_res.is_err() {
+        return Json(vec!());
+    }
+
+    let response = response_res.unwrap();
+
     let gtfs = GTFS.lock().unwrap();
 
     let mut ret = vec!();
 
-    let content = response.text().unwrap();
+    let content = response.text().unwrap_or("".to_string());
 
     let mut curr_works = DelayMapWorks::empty();
 
