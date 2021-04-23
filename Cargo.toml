@@ -8,7 +8,7 @@ license = "MIT"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-gtfs-structures = "0.22"
+gtfs-structures = { git = "https://github.com/Robbe7730/gtfs-structure", branch= "nmbs" }
 rocket = "0.4.6"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
