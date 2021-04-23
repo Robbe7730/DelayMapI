@@ -2,6 +2,7 @@
 
 mod gtfs_realtime;
 
+use gtfs_structures::Translatable;
 use gtfs_realtime::FeedMessage;
 
 use chrono::NaiveDate;
@@ -210,16 +211,17 @@ struct DelayMapURL {
     label: String,
 }
 
-#[get("/trains")]
-fn trains() -> Json<Vec<DelayMapTrain>> {
+#[get("/trains?<language>")]
+fn trains(language: Option<String>) -> Json<Vec<DelayMapTrain>> {
     let gtfs = GTFS.lock().unwrap();
     let delays = get_delays();
     Json(
         gtfs.trips
             .values()
             .filter_map(|trip| {
-                if rides_now(&gtfs, &trip) {
-                    Some(DelayMapTrain::from_gtfs(trip.clone(), &delays))
+                let translated_trip = trip.translate(&gtfs, &language.clone().unwrap_or("en".to_string()));
+                if rides_now(&gtfs, &translated_trip) {
+                    Some(DelayMapTrain::from_gtfs(&translated_trip, &delays))
                 } else {
                     None
                 }
