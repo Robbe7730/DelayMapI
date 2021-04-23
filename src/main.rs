@@ -230,8 +230,8 @@ fn trains(language: Option<String>) -> Json<Vec<DelayMapTrain>> {
     )
 }
 
-#[get("/works")]
-fn works() -> Json<Vec<DelayMapWorks>> {
+#[get("/works?<language>")]
+fn works(language: Option<String>) -> Json<Vec<DelayMapWorks>> {
     let response_res = reqwest::blocking::get(
         "http://www.belgianrail.be/jp/nmbs-realtime/query.exe/nny?performLocating=512&tpl=himmatch2json&look_nv=type|himmatch|maxnumber|300|no_match|yes|pubchannels|custom1|1028|",
     );
@@ -280,7 +280,12 @@ fn works() -> Json<Vec<DelayMapWorks>> {
                     "pubstarttime_0" => curr_works.start_time = value.to_string(),
                     "pubenddate_0" => curr_works.end_date = value.to_string(),
                     "pubendtime_0" => curr_works.end_time = value.to_string(),
-                    "impactstation_extId" => curr_works.impacted_station = Some(DelayMapStop::from_gtfs(&gtfs.stops[value])),
+                    "impactstation_extId" => curr_works.impacted_station = 
+                            gtfs.get_stop_translated(
+                                value,
+                                &language.clone().unwrap_or("en".to_string())
+                            ).map(|stop| DelayMapStop::from_gtfs(&stop))
+                            .ok(),
                     "urllist" => {
                         let mut urls = vec!();
                         let mut urlline = line;
