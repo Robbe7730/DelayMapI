@@ -232,8 +232,17 @@ fn trains(language: Option<String>) -> Json<Vec<DelayMapTrain>> {
 
 #[get("/works?<language>")]
 fn works(language: Option<String>) -> Json<Vec<DelayMapWorks>> {
+    let language_path = match language.as_ref().map(String::as_str) {
+        Some("nl") => "nny",
+        Some("en") => "eny",
+        Some("fr") => "fny",
+        Some("de") => "dny",
+        None => "eny",
+        _ => "eny",
+    };
+
     let response_res = reqwest::blocking::get(
-        "http://www.belgianrail.be/jp/nmbs-realtime/query.exe/nny?performLocating=512&tpl=himmatch2json&look_nv=type|himmatch|maxnumber|300|no_match|yes|pubchannels|custom1|1028|",
+        format!("http://www.belgianrail.be/jp/nmbs-realtime/query.exe/{}?performLocating=512&tpl=himmatch2json&look_nv=type|himmatch|maxnumber|300|no_match|yes|pubchannels|custom1|1028|", language_path),
     );
 
     if response_res.is_err() {
