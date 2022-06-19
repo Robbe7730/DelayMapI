@@ -5,10 +5,13 @@ mod delay;
 mod delaymap_stop_time;
 mod delaymap_train;
 mod delaymap_stop;
+mod delaymap_works;
+mod delaymap_works_parser;
 
 use delay::Delay;
 use delaymap_train::DelayMapTrain;
-use delaymap_stop::DelayMapStop;
+use delaymap_works::DelayMapWorks;
+use delaymap_works_parser::DelayMapWorksParser;
 
 use gtfs_structures::Translatable;
 use gtfs_realtime::FeedMessage;
@@ -28,65 +31,26 @@ use lazy_static::lazy_static;
 use rocket::*;
 use rocket_contrib::json::Json;
 
-use serde::Serialize;
-
 use protobuf::Message;
 
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::RwLock;
 use std::thread;
 use std::time::Duration;
 
 lazy_static! {
-    static ref GTFS: Mutex<Gtfs> = {
+    static ref GTFS: RwLock<Gtfs> = {
         let gtfs = Gtfs::from_url(
             "https://sncb-opendata.hafas.de/gtfs/static/c21ac6758dd25af84cca5b707f3cb3de",
         )
         .expect("Invalid GTFS url");
-        Mutex::new(gtfs)
+        RwLock::new(gtfs)
     };
-}
-
-#[derive(Serialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-struct DelayMapWorks {
-    id: String,
-    name: String,
-    message: String,
-    impacted_station: Option<DelayMapStop>,
-    start_date: String,
-    end_date: String,
-    start_time: String,
-    end_time: String,
-    urls: Vec<DelayMapURL>,
-}
-
-impl DelayMapWorks {
-    pub fn empty() -> Self {
-        return DelayMapWorks {
-            id: "Unknown id".to_string(),
-            name: "Unknown name".to_string(),
-            message: "No message given".to_string(),
-            impacted_station: None,
-            start_date: "Unknown start date".to_string(),
-            end_date: "Unknown end date".to_string(),
-            start_time: "Unknown start time".to_string(),
-            end_time: "Unknown end time".to_string(),
-            urls: vec!(),
-        }
-    }
-}
-
-#[derive(Serialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-struct DelayMapURL {
-    url: String,
-    label: String,
 }
 
 #[get("/trains?<language>")]
 fn trains(language: Option<String>) -> Json<Vec<DelayMapTrain>> {
-    let gtfs = GTFS.lock().unwrap();
+    let gtfs = GTFS.read().unwrap();
     let delays = get_delays();
     Json(
         gtfs.trips
@@ -124,92 +88,21 @@ fn works(language: Option<String>) -> Json<Vec<DelayMapWorks>> {
 
     let response = response_res.unwrap();
 
-    let gtfs = GTFS.lock().unwrap();
-
     let mut ret = vec!();
 
     let content = response.text().unwrap_or("".to_string());
 
-    let mut curr_works = DelayMapWorks::empty();
+    let mut found_works = true;
+    let mut parser = DelayMapWorksParser::new(language, content);
+    while found_works {
+        // TODO: If this fails, we need to recreate the rwlock
+        let gtfs = GTFS.read().unwrap();
 
-    let mut line_iter = content.lines().peekable();
-    while line_iter.peek().is_some() {
-        let line = line_iter.next().unwrap();
-        if line == "{" {
-            // Create new DelayMapWorks
-            curr_works = DelayMapWorks::empty();
-        } else if line == "}" {
-            // Store the DelayMapWorks
-            ret.push(curr_works.clone());
+        let res_new_works = parser.parse_next(gtfs);
+        if let Ok(Some(new_works)) = res_new_works {
+            ret.push(new_works);
         } else {
-            let line_split = line.split_once(':');
-
-            if line_split.is_some() {
-                let (mut key, mut value) = line_split.unwrap();
-                key = key.strip_prefix(",").unwrap_or(key);
-                key = key.strip_prefix("\"").unwrap_or(key);
-                key = key.strip_suffix("\"").unwrap_or(key);
-
-                value = value.strip_prefix(",").unwrap_or(value);
-                value = value.strip_prefix("\"").unwrap_or(value);
-                value = value.strip_suffix("\"").unwrap_or(value);
-
-                match key {
-                    "id" => curr_works.id = value.to_string(),
-                    "caption" => curr_works.name = value.to_string(),
-                    "message" => curr_works.message = value.to_string(),
-                    "pubstartdate_0" => curr_works.start_date = value.to_string(),
-                    "pubstarttime_0" => curr_works.start_time = value.to_string(),
-                    "pubenddate_0" => curr_works.end_date = value.to_string(),
-                    "pubendtime_0" => curr_works.end_time = value.to_string(),
-                    "impactstation_extId" => curr_works.impacted_station = 
-                            gtfs.get_stop_translated(
-                                value,
-                                &language.clone().unwrap_or("en".to_string())
-                            ).map(|stop| stop.into())
-                            .ok(),
-                    "urllist" => {
-                        let mut urls = vec!();
-                        let mut urlline = line;
-                        let mut curr_url = DelayMapURL {
-                            label: "Link".to_string(),
-                            url: "#".to_string(),
-                        };
-                        while urlline != "]" {
-                            urlline = line_iter.next().unwrap();
-                            if urlline.ends_with("{") {
-                                curr_url = DelayMapURL {
-                                    label: "Link".to_string(),
-                                    url: "#".to_string(),
-                                };
-                            } else if urlline.starts_with("}") {
-                                urls.push(curr_url.clone());
-                            } else {
-                                let urlline_split = urlline.split_once(":");
-
-                                if urlline_split.is_some() {
-                                    let (mut urlkey, mut urlvalue) = urlline_split.unwrap();
-                                    urlkey = urlkey.strip_prefix(",").unwrap_or(urlkey);
-                                    urlkey = urlkey.strip_prefix("\"").unwrap_or(urlkey);
-                                    urlkey = urlkey.strip_suffix("\"").unwrap_or(urlkey);
-
-                                    urlvalue = urlvalue.strip_prefix(",").unwrap_or(urlvalue);
-                                    urlvalue = urlvalue.strip_prefix("\"").unwrap_or(urlvalue);
-                                    urlvalue = urlvalue.strip_suffix("\"").unwrap_or(urlvalue);
-                                    match urlkey {
-                                        "url" => curr_url.url = urlvalue.to_string(),
-                                        "label" => curr_url.label = urlvalue.to_string(),
-                                        _ => {}
-                                    }
-                                }
-                            }
-                        }
-
-                        curr_works.urls = urls.clone();
-                    },
-                    _ => {}
-                }
-            }
+            found_works = false;
         }
     }
 
@@ -312,7 +205,7 @@ fn get_delays() -> HashMap<String, HashMap<String, Delay>> {
 }
 
 fn update_gtfs() {
-    let mut gtfs = GTFS.lock().unwrap();
+    let mut gtfs = GTFS.write().unwrap();
     *gtfs = Gtfs::from_url(
         "https://sncb-opendata.hafas.de/gtfs/static/c21ac6758dd25af84cca5b707f3cb3de",
     )

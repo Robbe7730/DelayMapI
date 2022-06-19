@@ -4,10 +4,10 @@ use serde::Serialize;
 #[derive(Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct DelayMapStop {
-    name: String,
-    lat: Option<f64>,
-    lon: Option<f64>,
-    stop_id: String,
+    pub name: String,
+    pub lat: Option<f64>,
+    pub lon: Option<f64>,
+    pub stop_id: String,
 }
 
 impl From<Stop> for DelayMapStop {
