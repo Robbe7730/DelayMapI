@@ -3,16 +3,18 @@ use gtfs_structures::StopTime;
 
 use serde::Serialize;
 
+// Arrival_delay and _timestamp are only allowed to be None at the first station
+// Departure_delay and _timestamp are only allowed to be None at the last station
 #[derive(Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct DelayMapStopTime {
     pub name: String,
     pub lat: Option<f64>,
     pub lon: Option<f64>,
-    pub arrival_delay: i32,
-    pub arrival_timestamp: u32,
-    pub departure_delay: i32,
-    pub departure_timestamp: u32,
+    pub arrival_delay: Option<i32>,
+    pub arrival_timestamp: Option<u32>,
+    pub departure_delay: Option<i32>,
+    pub departure_timestamp: Option<u32>,
     pub stop_id: String,
 }
 
@@ -23,9 +25,9 @@ impl DelayMapStopTime {
             lat: stoptime.stop.latitude,
             lon: stoptime.stop.longitude,
             arrival_delay: delay.arrival_delay,
-            arrival_timestamp: stoptime.arrival_time.unwrap_or(0),
+            arrival_timestamp: stoptime.arrival_time,
             departure_delay: delay.departure_delay,
-            departure_timestamp: stoptime.departure_time.unwrap_or(0),
+            departure_timestamp: stoptime.departure_time,
             stop_id: stoptime.stop.id.clone(),
         }
     }
@@ -51,18 +53,18 @@ mod tests {
         stoptime.departure_time = Some(456);
 
         let delay = Delay {
-            arrival_delay: 12,
-            departure_delay: 34,
+            arrival_delay: Some(12),
+            departure_delay: Some(34),
         };
         let dm_stoptime = DelayMapStopTime::from_gtfs(&stoptime, &delay);
 
         assert_eq!(dm_stoptime.name, "Stop 1");
         assert_eq!(dm_stoptime.lat, Some(13.37));
         assert_eq!(dm_stoptime.lon, Some(4.20));
-        assert_eq!(dm_stoptime.arrival_delay, 12);
-        assert_eq!(dm_stoptime.arrival_timestamp, 123);
-        assert_eq!(dm_stoptime.departure_delay, 34);
-        assert_eq!(dm_stoptime.departure_timestamp, 456);
+        assert_eq!(dm_stoptime.arrival_delay, Some(12));
+        assert_eq!(dm_stoptime.arrival_timestamp, Some(123));
+        assert_eq!(dm_stoptime.departure_delay, Some(34));
+        assert_eq!(dm_stoptime.departure_timestamp, Some(456));
         assert_eq!(dm_stoptime.stop_id, "stop1_id");
     }
 
@@ -70,18 +72,18 @@ mod tests {
     fn test_from_gtfs_empty() {
         let stoptime = StopTime::default();
         let delay = Delay {
-            arrival_delay: 0,
-            departure_delay: 0,
+            arrival_delay: None,
+            departure_delay: None,
         };
         let dm_stoptime = DelayMapStopTime::from_gtfs(&stoptime, &delay);
 
         assert_eq!(dm_stoptime.name, "");
         assert_eq!(dm_stoptime.lat, None);
         assert_eq!(dm_stoptime.lon, None);
-        assert_eq!(dm_stoptime.arrival_delay, 0);
-        assert_eq!(dm_stoptime.arrival_timestamp, 0);
-        assert_eq!(dm_stoptime.departure_delay, 0);
-        assert_eq!(dm_stoptime.departure_timestamp, 0);
+        assert_eq!(dm_stoptime.arrival_delay, None);
+        assert_eq!(dm_stoptime.arrival_timestamp, None);
+        assert_eq!(dm_stoptime.departure_delay, None);
+        assert_eq!(dm_stoptime.departure_timestamp, None);
         assert_eq!(dm_stoptime.stop_id, "");
     }
 }

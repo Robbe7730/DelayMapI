@@ -3,9 +3,11 @@
 mod gtfs_realtime;
 mod delay;
 mod delaymap_stop_time;
+mod delaymap_train;
+
 
 use delay::Delay;
-use delaymap_stop_time::DelayMapStopTime;
+use delaymap_train::DelayMapTrain;
 
 use gtfs_structures::Translatable;
 use gtfs_realtime::FeedMessage;
@@ -43,82 +45,6 @@ lazy_static! {
         .expect("Invalid GTFS url");
         Mutex::new(gtfs)
     };
-}
-
-#[derive(Serialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-struct DelayMapTrain {
-    id: String,
-    name: String,
-    stops: Vec<DelayMapStopTime>,
-    stop_index: usize,
-    is_stopped: bool,
-    estimated_lat: f64,
-    estimated_lon: f64,
-}
-
-impl DelayMapTrain {
-    fn from_gtfs(trip: &Trip, delaymap: &HashMap<String, HashMap<String, Delay>>) -> DelayMapTrain {
-        let mut stops = vec![];
-        let mut curr_delay = Delay {
-            arrival_delay: 0,
-            departure_delay: 0,
-        };
-        let mut current_stop: Option<usize> = None;
-        let mut is_stopped: bool = true;
-        let local_datetime = Brussels.from_utc_datetime(&Utc::now().naive_utc());
-        let local_timestamp = local_datetime.time().num_seconds_from_midnight() as i64;
-        let mut previous_departure = 0;
-        let mut estimated_lat = 0.0;
-        let mut estimated_lon = 0.0;
-        let mut previous_stop_lat = 0.0;
-        let mut previous_stop_lon = 0.0;
-        for (i, stop_time) in trip.stop_times.iter().enumerate() {
-            if let Some(trip_delaymap) = delaymap.get(&trip.id) {
-                if let Some(delay_patch) = trip_delaymap.get(&stop_time.stop.id) {
-                    curr_delay.arrival_delay = delay_patch.arrival_delay;
-                    curr_delay.departure_delay = delay_patch.departure_delay;
-                }
-            }
-            let stop = DelayMapStopTime::from_gtfs(&stop_time, &curr_delay);
-            let actual_arrival = stop.arrival_timestamp as i64 + stop.arrival_delay as i64;
-            let actual_departure = stop.departure_timestamp as i64 + stop.departure_delay as i64;
-            
-            if (i == 0 || actual_arrival < local_timestamp) && actual_departure > local_timestamp {
-                current_stop = Some(i);
-                is_stopped = true;
-                estimated_lat = stop.lat.unwrap_or(0.0);
-                estimated_lon = stop.lon.unwrap_or(0.0);
-            } else if actual_arrival > local_timestamp && previous_departure < local_timestamp {
-                current_stop = Some(i);
-                is_stopped = false;
-                let curr_lat = stop.lat.unwrap_or(0.0);
-                let curr_lon = stop.lon.unwrap_or(0.0);
-                let percentage_complete: f64 = ((local_timestamp - previous_departure) as f64)
-                    / (actual_arrival - previous_departure) as f64;
-                estimated_lat = percentage_complete * curr_lat
-                    + (1.0 - percentage_complete) * previous_stop_lat;
-                estimated_lon = percentage_complete * curr_lon
-                    + (1.0 - percentage_complete) * previous_stop_lon;
-            }
-            previous_departure = actual_departure;
-            previous_stop_lat = stop.lat.unwrap_or(0.0);
-            previous_stop_lon = stop.lon.unwrap_or(0.0);
-            stops.push(stop);
-        }
-        DelayMapTrain {
-            id: trip.id.to_string(),
-            name: trip
-                .trip_headsign
-                .clone()
-                .unwrap_or("Unknown Train".to_string()),
-            stops: stops,
-            stop_index: current_stop.unwrap_or(0),
-            is_stopped: is_stopped,
-            estimated_lat: estimated_lat,
-            estimated_lon: estimated_lon,
-        }
-    }
 }
 
 #[derive(Serialize, Debug, Clone)]
