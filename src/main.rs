@@ -4,10 +4,11 @@ mod gtfs_realtime;
 mod delay;
 mod delaymap_stop_time;
 mod delaymap_train;
-
+mod delaymap_stop;
 
 use delay::Delay;
 use delaymap_train::DelayMapTrain;
+use delaymap_stop::DelayMapStop;
 
 use gtfs_structures::Translatable;
 use gtfs_realtime::FeedMessage;
@@ -21,7 +22,6 @@ use chrono_tz::Europe::Brussels;
 use gtfs_structures::Exception;
 use gtfs_structures::Gtfs;
 use gtfs_structures::Trip;
-use gtfs_structures::Stop;
 
 use lazy_static::lazy_static;
 
@@ -45,26 +45,6 @@ lazy_static! {
         .expect("Invalid GTFS url");
         Mutex::new(gtfs)
     };
-}
-
-#[derive(Serialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-struct DelayMapStop {
-    name: String,
-    lat: Option<f64>,
-    lon: Option<f64>,
-    stop_id: String,
-}
-
-impl DelayMapStop {
-    pub fn from_gtfs(stop: &Stop) -> Self {
-        DelayMapStop {
-            name: stop.name.to_string(),
-            lat: stop.latitude,
-            lon: stop.longitude,
-            stop_id: stop.id.to_string(),
-        }
-    }
 }
 
 #[derive(Serialize, Debug, Clone)]
@@ -186,7 +166,7 @@ fn works(language: Option<String>) -> Json<Vec<DelayMapWorks>> {
                             gtfs.get_stop_translated(
                                 value,
                                 &language.clone().unwrap_or("en".to_string())
-                            ).map(|stop| DelayMapStop::from_gtfs(&stop))
+                            ).map(|stop| stop.into())
                             .ok(),
                     "urllist" => {
                         let mut urls = vec!();
