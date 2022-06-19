@@ -1,6 +1,9 @@
 #![feature(proc_macro_hygiene, decl_macro)]
 
 mod gtfs_realtime;
+mod delay;
+
+use delay::Delay;
 
 use gtfs_structures::Translatable;
 use gtfs_realtime::FeedMessage;
@@ -145,13 +148,6 @@ impl DelayMapTrain {
             estimated_lon: estimated_lon,
         }
     }
-}
-
-#[derive(Serialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-struct Delay {
-    arrival_delay: Option<i32>,
-    departure_delay: Option<i32>,
 }
 
 #[derive(Serialize, Debug, Clone)]
@@ -427,21 +423,8 @@ fn get_delays() -> HashMap<String, HashMap<String, Delay>> {
                 let key = trip.get_trip_id();
                 let mut delay_map: HashMap<String, Delay> = HashMap::new();
                 for update in update.stop_time_update {
-                    let mut delay = Delay {
-                        departure_delay: None,
-                        arrival_delay: None,
-                    };
                     let stop_id = update.get_stop_id().to_string();
-
-                    if let Some(departure) = update.departure.into_option() {
-                        delay.departure_delay = Some(departure.get_delay())
-                    }
-
-                    if let Some(arrival) = update.arrival.into_option() {
-                        delay.arrival_delay = Some(arrival.get_delay())
-                    }
-
-                    delay_map.insert(stop_id, delay);
+                    delay_map.insert(stop_id, update.into());
                 }
                 ret.insert(key.to_string(), delay_map);
             }
