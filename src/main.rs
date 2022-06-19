@@ -2,8 +2,10 @@
 
 mod gtfs_realtime;
 mod delay;
+mod delaymap_stop_time;
 
 use delay::Delay;
+use delaymap_stop_time::DelayMapStopTime;
 
 use gtfs_structures::Translatable;
 use gtfs_realtime::FeedMessage;
@@ -16,7 +18,6 @@ use chrono_tz::Europe::Brussels;
 
 use gtfs_structures::Exception;
 use gtfs_structures::Gtfs;
-use gtfs_structures::StopTime;
 use gtfs_structures::Trip;
 use gtfs_structures::Stop;
 
@@ -46,34 +47,6 @@ lazy_static! {
 
 #[derive(Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
-struct DelayMapStopTime {
-    name: String,
-    lat: Option<f64>,
-    lon: Option<f64>,
-    arrival_delay: i32,
-    arrival_timestamp: u32,
-    departure_delay: i32,
-    departure_timestamp: u32,
-    stop_id: String,
-}
-
-impl DelayMapStopTime {
-    fn from_gtfs(stoptime: &StopTime, delay: &Delay) -> DelayMapStopTime {
-        DelayMapStopTime {
-            name: stoptime.stop.name.clone(),
-            lat: stoptime.stop.latitude,
-            lon: stoptime.stop.longitude,
-            arrival_delay: delay.arrival_delay.unwrap_or(0),
-            arrival_timestamp: stoptime.arrival_time.unwrap_or(0),
-            departure_delay: delay.departure_delay.unwrap_or(0),
-            departure_timestamp: stoptime.departure_time.unwrap_or(0),
-            stop_id: stoptime.stop.id.to_string(),
-        }
-    }
-}
-
-#[derive(Serialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
 struct DelayMapTrain {
     id: String,
     name: String,
@@ -88,8 +61,8 @@ impl DelayMapTrain {
     fn from_gtfs(trip: &Trip, delaymap: &HashMap<String, HashMap<String, Delay>>) -> DelayMapTrain {
         let mut stops = vec![];
         let mut curr_delay = Delay {
-            arrival_delay: Some(0),
-            departure_delay: Some(0),
+            arrival_delay: 0,
+            departure_delay: 0,
         };
         let mut current_stop: Option<usize> = None;
         let mut is_stopped: bool = true;
@@ -103,10 +76,8 @@ impl DelayMapTrain {
         for (i, stop_time) in trip.stop_times.iter().enumerate() {
             if let Some(trip_delaymap) = delaymap.get(&trip.id) {
                 if let Some(delay_patch) = trip_delaymap.get(&stop_time.stop.id) {
-                    curr_delay.arrival_delay =
-                        delay_patch.arrival_delay.or(curr_delay.arrival_delay);
-                    curr_delay.departure_delay =
-                        delay_patch.departure_delay.or(curr_delay.departure_delay);
+                    curr_delay.arrival_delay = delay_patch.arrival_delay;
+                    curr_delay.departure_delay = delay_patch.departure_delay;
                 }
             }
             let stop = DelayMapStopTime::from_gtfs(&stop_time, &curr_delay);
