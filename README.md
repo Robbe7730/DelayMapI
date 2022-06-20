@@ -1,5 +1,7 @@
 # DelayMapI
 
+[![codecov](https://codecov.io/gh/Robbe7730/DelayMapI/branch/main/graph/badge.svg?token=LQ1YP7VE7O)](https://codecov.io/gh/Robbe7730/DelayMapI)
+
 The API for [DelayMap](https://github.com/Robbe7730/DelayMap) 3.0.0.
 
 ## Installation
