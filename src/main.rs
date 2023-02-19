@@ -34,6 +34,7 @@ use rocket_contrib::json::Json;
 use protobuf::Message;
 
 use std::collections::HashMap;
+use std::env;
 use std::sync::RwLock;
 use std::thread;
 use std::time::Duration;
@@ -213,6 +214,11 @@ fn update_gtfs() {
 }
 
 fn main() {
+    let _guard ;
+    if let Ok(dsn) = env::var("SENTRY_DSN") {
+        _guard = sentry::init(dsn);
+    }
+
     thread::spawn(move || {
         loop {
             println!("Updating");
