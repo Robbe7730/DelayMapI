@@ -107,6 +107,7 @@ fn works(language: Option<String>) -> Json<Vec<DelayMapWorks>> {
         if let Ok(Some(new_works)) = res_new_works {
             ret.push(new_works);
         } else {
+            sentry::capture_error(&res_new_works.unwrap_err());
             found_works = false;
         }
     }

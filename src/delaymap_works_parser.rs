@@ -1,9 +1,25 @@
 use crate::delaymap_works::DelayMapWorks;
 use crate::delaymap_works::DelayMapURL;
 
+use std::fmt;
 use std::sync::RwLockReadGuard;
 
+use serde::ser::StdError;
+
 use gtfs_structures::Gtfs;
+
+#[derive(Debug)]
+pub struct DelayMapWorksParserError {
+    message: String
+}
+
+impl fmt::Display for DelayMapWorksParserError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Could not parse Works: {}", self.message)
+    }
+}
+
+impl StdError for DelayMapWorksParserError {}
 
 pub struct DelayMapWorksParser {
     language: String,
@@ -28,20 +44,21 @@ impl DelayMapWorksParser {
         self.lines.get(self.line_i - 1).map(|x| x.to_string())
     }
 
-    pub fn parse_next(&mut self, gtfs: RwLockReadGuard<Gtfs>) -> Result<Option<DelayMapWorks>, ()> {
+    pub fn parse_next(&mut self, gtfs: RwLockReadGuard<Gtfs>) -> Result<Option<DelayMapWorks>, DelayMapWorksParserError> {
         let mut maybe_line = self.next_line();
 
-        if maybe_line == Some("himmessages=[".to_string()) {
+        if maybe_line == Some("himmessages=[".to_string()) || maybe_line == Some("\"himmessages\"=[".to_string()) {
             maybe_line = self.next_line();
-            if maybe_line == Some("]".to_string()) {
+            if maybe_line == Some("]".to_string()) || maybe_line == Some("];".to_string()) {
                 // No messages
                 return Ok(None);
             }
         }
 
         if maybe_line != Some("{".to_string()) && maybe_line != Some(",{".to_string()) {
-            eprintln!("Invalid first line \"{:?}\"", maybe_line);
-            return Err(())
+            return Err(DelayMapWorksParserError {
+                message: format!("Invalid first line {:?}", maybe_line)
+            })
         }
 
         let mut ret = DelayMapWorks::empty();
