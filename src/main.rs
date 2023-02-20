@@ -39,6 +39,8 @@ use std::sync::RwLock;
 use std::thread;
 use std::time::Duration;
 
+use tracing_subscriber::prelude::*;
+
 lazy_static! {
     static ref GTFS: RwLock<Gtfs> = {
         let gtfs = Gtfs::from_url(
@@ -50,6 +52,7 @@ lazy_static! {
 }
 
 #[get("/trains?<language>")]
+#[tracing::instrument]
 fn trains(language: Option<String>) -> Json<Vec<DelayMapTrain>> {
     let gtfs = GTFS.read().unwrap();
     let delays = get_delays().ok();
@@ -69,6 +72,7 @@ fn trains(language: Option<String>) -> Json<Vec<DelayMapTrain>> {
 }
 
 #[get("/works?<language>")]
+#[tracing::instrument]
 fn works(language: Option<String>) -> Json<Vec<DelayMapWorks>> {
     let language_path = match language.as_ref().map(String::as_str) {
         Some("nl") => "nny",
@@ -179,6 +183,7 @@ fn rides_at_date(gtfs: &Gtfs, trip: &Trip, date: NaiveDate) -> bool {
     ret
 }
 
+#[tracing::instrument]
 fn get_delays() -> Result<HashMap<String, HashMap<String, Delay>>, String> {
     let mut response = reqwest::blocking::get(
         "https://sncb-opendata.hafas.de/gtfs/realtime/c21ac6758dd25af84cca5b707f3cb3de",
@@ -212,6 +217,7 @@ fn get_delays() -> Result<HashMap<String, HashMap<String, Delay>>, String> {
     Ok(ret)
 }
 
+#[tracing::instrument]
 fn update_gtfs() {
     let mut gtfs = GTFS.write().unwrap();
     *gtfs = Gtfs::from_url(
@@ -223,7 +229,16 @@ fn update_gtfs() {
 fn main() {
     let _guard ;
     if let Ok(dsn) = env::var("SENTRY_DSN") {
-        _guard = sentry::init(dsn);
+        tracing_subscriber::Registry::default()
+            .with(sentry_tracing::layer())
+            .init();
+
+        _guard = sentry::init((dsn, sentry::ClientOptions {
+            release: sentry::release_name!(),
+            traces_sample_rate: 1.0,
+
+            ..Default::default()
+        }));
     }
 
     thread::spawn(move || {

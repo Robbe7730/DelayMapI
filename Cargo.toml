@@ -9,21 +9,24 @@ license = "MIT"
 
 [dependencies]
 gtfs-structures = { git = "https://github.com/Robbe7730/gtfs-structure", branch= "nmbs" }
-rocket = "0.4.6"
+rocket = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-lazy_static = "1.4.0"
+lazy_static = "1.4"
 chrono = "0.4"
-chrono-tz = "0.5"
-reqwest = { version = "0.11.0", features = ["blocking"] }
-protobuf = "2.22.0"
-rocket_cors = "0.5.1"
-sentry = "0.29.3"
+chrono-tz = "0.8"
+reqwest = { version = "0.11.4", features = ["blocking"] }
+protobuf = "2.22"
+rocket_cors = "0.5"
+sentry = "0.29"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+sentry-tracing = "0.29"
 
 [build-dependencies]
 protoc-rust = "2.0"
 
 [dependencies.rocket_contrib]
-version = "0.4.6"
+version = "0.4"
 default-features = false
 features = ["json"]
