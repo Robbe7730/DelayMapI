@@ -52,7 +52,7 @@ lazy_static! {
 #[get("/trains?<language>")]
 fn trains(language: Option<String>) -> Json<Vec<DelayMapTrain>> {
     let gtfs = GTFS.read().unwrap();
-    let delays = get_delays();
+    let delays = get_delays().ok();
     Json(
         gtfs.trips
             .values()
@@ -179,12 +179,19 @@ fn rides_at_date(gtfs: &Gtfs, trip: &Trip, date: NaiveDate) -> bool {
     ret
 }
 
-fn get_delays() -> HashMap<String, HashMap<String, Delay>> {
+fn get_delays() -> Result<HashMap<String, HashMap<String, Delay>>, String> {
     let mut response = reqwest::blocking::get(
         "https://sncb-opendata.hafas.de/gtfs/realtime/c21ac6758dd25af84cca5b707f3cb3de",
-    )
-    .unwrap();
-    let feed = FeedMessage::parse_from_reader(&mut response).unwrap();
+    ).map_err(|x| {
+        sentry::capture_error(&x);
+        x.to_string()
+    })?;
+    
+    let feed = FeedMessage::parse_from_reader(&mut response)
+        .map_err(|x| {
+        sentry::capture_error(&x);
+        x.to_string()
+    })?;
 
     let mut ret = HashMap::new();
 
@@ -202,7 +209,7 @@ fn get_delays() -> HashMap<String, HashMap<String, Delay>> {
         }
     }
 
-    ret
+    Ok(ret)
 }
 
 fn update_gtfs() {

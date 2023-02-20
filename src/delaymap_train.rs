@@ -27,7 +27,7 @@ pub struct DelayMapTrain {
 impl DelayMapTrain {
     pub fn from_gtfs(
         trip: &Trip,
-        delaymap: &HashMap<String, HashMap<String, Delay>>
+        maybe_delaymap: &Option<HashMap<String, HashMap<String, Delay>>>
     ) -> DelayMapTrain {
         let mut ret = DelayMapTrain {
             id: trip.id.to_string(),
@@ -57,12 +57,14 @@ impl DelayMapTrain {
 
         for (i, stop_time) in trip.stop_times.iter().enumerate() {
             // Apply delay patch
-            if let Some(trip_delaymap) = delaymap.get(&trip.id) {
-                if let Some(delay_patch) = trip_delaymap.get(&stop_time.stop.id) {
-                    curr_delay.arrival_delay =
-                        delay_patch.arrival_delay.or(curr_delay.arrival_delay);
-                    curr_delay.departure_delay =
-                        delay_patch.departure_delay.or(curr_delay.departure_delay);
+            if let Some(delaymap) = maybe_delaymap {
+                if let Some(trip_delaymap) = delaymap.get(&trip.id) {
+                    if let Some(delay_patch) = trip_delaymap.get(&stop_time.stop.id) {
+                        curr_delay.arrival_delay =
+                            delay_patch.arrival_delay.or(curr_delay.arrival_delay);
+                        curr_delay.departure_delay =
+                            delay_patch.departure_delay.or(curr_delay.departure_delay);
+                    }
                 }
             }
 
@@ -155,7 +157,7 @@ mod tests {
     fn test_trip_id_name() {
         let trip = create_trip(0);
         let delaymap = HashMap::new();
-        let train = DelayMapTrain::from_gtfs(&trip, &delaymap);
+        let train = DelayMapTrain::from_gtfs(&trip, &Some(delaymap));
         assert_eq!(train.name, "My Train".to_string());
         assert_eq!(train.id, "my-train".to_string());
     }
@@ -165,7 +167,7 @@ mod tests {
     fn test_interpolation_not_started() {
         let trip = create_trip(-10);
         let delaymap = HashMap::new();
-        let train = DelayMapTrain::from_gtfs(&trip, &delaymap);
+        let train = DelayMapTrain::from_gtfs(&trip, &Some(delaymap));
         assert_eq!(train.estimated_lat, 0.0);
         assert_eq!(train.estimated_lon, 0.0);
         assert_eq!(train.is_stopped, true);
@@ -176,7 +178,7 @@ mod tests {
     fn test_interpolation_first_sector() {
         let trip = create_trip(40);
         let delaymap = HashMap::new();
-        let train = DelayMapTrain::from_gtfs(&trip, &delaymap);
+        let train = DelayMapTrain::from_gtfs(&trip, &Some(delaymap));
         assert_eq!(train.estimated_lat, 2.0);
         assert_eq!(train.estimated_lon, 2.0);
         assert_eq!(train.is_stopped, false);
@@ -187,7 +189,7 @@ mod tests {
     fn test_interpolation_in_station() {
         let trip = create_trip(62);
         let delaymap = HashMap::new();
-        let train = DelayMapTrain::from_gtfs(&trip, &delaymap);
+        let train = DelayMapTrain::from_gtfs(&trip, &Some(delaymap));
         assert_eq!(train.estimated_lat, 3.0);
         assert_eq!(train.estimated_lon, 3.0);
         assert_eq!(train.is_stopped, true);
@@ -198,7 +200,7 @@ mod tests {
     fn test_interpolation_last_sector() {
         let trip = create_trip(150);
         let delaymap = HashMap::new();
-        let train = DelayMapTrain::from_gtfs(&trip, &delaymap);
+        let train = DelayMapTrain::from_gtfs(&trip, &Some(delaymap));
         assert_eq!(train.estimated_lat, 4.2);
         assert_eq!(train.estimated_lon, 6.0);
         assert_eq!(train.is_stopped, false);
@@ -209,7 +211,7 @@ mod tests {
     fn test_interpolation_arrived() {
         let trip = create_trip(200);
         let delaymap = HashMap::new();
-        let train = DelayMapTrain::from_gtfs(&trip, &delaymap);
+        let train = DelayMapTrain::from_gtfs(&trip, &Some(delaymap));
         assert_eq!(train.estimated_lat, 6.0);
         assert_eq!(train.estimated_lon, 6.0);
         assert_eq!(train.is_stopped, true);
@@ -221,7 +223,7 @@ mod tests {
     fn test_delay_none() {
         let trip = create_trip(0);
         let delaymap = HashMap::new();
-        let train = DelayMapTrain::from_gtfs(&trip, &delaymap);
+        let train = DelayMapTrain::from_gtfs(&trip, &Some(delaymap));
 
         check_delays(
             train,
@@ -253,7 +255,7 @@ mod tests {
         let mut delaymap = HashMap::new();
         delaymap.insert("my-train".to_string(), trip_delays);
 
-        let train = DelayMapTrain::from_gtfs(&trip, &delaymap);
+        let train = DelayMapTrain::from_gtfs(&trip, &Some(delaymap));
 
         check_delays(
             train,
@@ -281,7 +283,7 @@ mod tests {
         let mut delaymap = HashMap::new();
         delaymap.insert("my-train".to_string(), trip_delays);
 
-        let train = DelayMapTrain::from_gtfs(&trip, &delaymap);
+        let train = DelayMapTrain::from_gtfs(&trip, &Some(delaymap));
 
         check_delays(
             train,
@@ -314,7 +316,7 @@ mod tests {
         let mut delaymap = HashMap::new();
         delaymap.insert("my-train".to_string(), trip_delays);
 
-        let train = DelayMapTrain::from_gtfs(&trip, &delaymap);
+        let train = DelayMapTrain::from_gtfs(&trip, &Some(delaymap));
 
         check_delays(
             train,
@@ -338,7 +340,7 @@ mod tests {
         let mut delaymap = HashMap::new();
         delaymap.insert("my-train".to_string(), trip_delays);
 
-        let train = DelayMapTrain::from_gtfs(&trip, &delaymap);
+        let train = DelayMapTrain::from_gtfs(&trip, &Some(delaymap));
 
         assert_eq!(train.estimated_lat, 2.0);
         assert_eq!(train.estimated_lon, 2.0);
