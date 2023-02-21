@@ -5,6 +5,10 @@ authors = ["Robbe Van Herck <robbe@robbevanherck.be>"]
 edition = "2018"
 license = "MIT"
 
+[[bin]]
+path = "src/main.rs"
+name = "delaymapi"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]

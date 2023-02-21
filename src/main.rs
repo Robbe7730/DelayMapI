@@ -107,7 +107,9 @@ fn works(language: Option<String>) -> Json<Vec<DelayMapWorks>> {
         if let Ok(Some(new_works)) = res_new_works {
             ret.push(new_works);
         } else {
-            sentry::capture_error(&res_new_works.unwrap_err());
+            if let Err(e) = res_new_works {
+                sentry::capture_error(&e);
+            }
             found_works = false;
         }
     }
@@ -192,7 +194,7 @@ fn get_delays() -> Result<HashMap<String, HashMap<String, Delay>>, String> {
         sentry::capture_error(&x);
         x.to_string()
     })?;
-    
+
     let feed = FeedMessage::parse_from_reader(&mut response)
         .map_err(|x| {
         sentry::capture_error(&x);
@@ -244,9 +246,9 @@ fn main() {
 
     thread::spawn(move || {
         loop {
-            println!("Updating");
+            sentry::capture_message("Updating", sentry::Level::Info);
             update_gtfs();
-            println!("Done updating");
+            sentry::capture_message("Done updating", sentry::Level::Info);
             thread::sleep(Duration::new(24 * 60 * 60, 0));
         }
     });

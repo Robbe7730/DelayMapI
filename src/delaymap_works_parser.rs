@@ -49,10 +49,11 @@ impl DelayMapWorksParser {
 
         if maybe_line == Some("himmessages=[".to_string()) || maybe_line == Some("\"himmessages\"=[".to_string()) {
             maybe_line = self.next_line();
-            if maybe_line == Some("]".to_string()) || maybe_line == Some("];".to_string()) {
-                // No messages
-                return Ok(None);
-            }
+        }
+
+        if maybe_line == Some("]".to_string()) || maybe_line == Some("];".to_string()) {
+            // No more messages
+            return Ok(None);
         }
 
         if maybe_line != Some("{".to_string()) && maybe_line != Some(",{".to_string()) {
